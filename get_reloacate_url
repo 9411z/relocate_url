@@ -1,0 +1,99 @@
+# ! /usr/bin/env python3
+"""
+Copyright (c) 2023 Baidu.com, Inc. All Rights Reserved
+
+This module provide a netSpider for
+https://www.estherperel.com/podcast
+
+Authors: zhangqi70@baidu.com
+Date: 2024/01/16
+
+"""
+import hashlib
+
+# coding: utf-8
+import requests
+import re
+import json
+from lxml import  etree
+import requests
+
+
+url = "https://www.estherperel.com/podcast"
+payload = {}
+headers = {}
+response = requests.request("GET", url, headers=headers, data=payload)
+obj = etree.HTML(response.text)
+# print("response.text:", response.text)
+
+mp3_lists = obj.xpath(".//div[@role='list']//div[@class='collection-item-3 w-dyn-item']")
+print("len:", len(mp3_lists))
+for item in mp3_lists:
+
+    mp3_url = item.xpath(".//a/@href")[0]
+    mp3_url = "https://www.estherperel.com" + mp3_url
+    id = hashlib.md5(str(mp3_url).encode()).hexdigest()
+
+    response_item = requests.request("GET", mp3_url)
+    tree = etree.HTML(response_item.content)
+    print("response_item.content:", etree.tostring(tree))
+    seed = tree.xpath(".//iframe/@src")[0]
+    seed = seed.split("https://playlist.megaphone.fm/?e=")[1]
+    print("seed:", seed)
+    import requests
+
+    item_url = "https://player.megaphone.fm/playlist/episode/" + seed
+
+    payload = {}
+    headers = {
+        'authority': 'player.megaphone.fm',
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'zh-CN,zh;q=0.9,ja;q=0.8',
+        'cache-control': 'no-cache',
+        'origin': 'https://playlist.megaphone.fm',
+        'pragma': 'no-cache',
+        'referer': 'https://playlist.megaphone.fm/',
+        'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    response_seed = requests.request("GET", item_url, headers=headers, data=payload)
+
+    print(response_seed.text)
+    json_data = json.loads(response_seed.text)
+    download_url = json_data["episodes"][0]["audioUrl"]
+    print("download_url:", download_url)
+    response_redicets = requests.request("GET", download_url, allow_redirects=False)
+    relocate_url = ""
+    if response_redicets.status_code == 301 or response_redicets.status_code == 302:
+        print("response_redicets.status_code:", response_redicets.status_code)
+
+        print("text:", response_redicets)
+        print("Headers:")
+        for header, value in response_redicets.headers.items():
+            print(header + ": " + value)
+
+        print("\nText:")
+        print(response_redicets.text)
+
+        relocate_url = response_redicets.headers.get('Location')
+        print("relocate_url:", relocate_url)
+        # print('该URL已重定向到：', response.headers['Location'])
+    else:
+        print('请求成功！')
+        continue
+
+    data_info = {
+            "id": id,
+            "url": mp3_url,
+            "download_url": relocate_url
+        }
+
+    with open('estherperel_list.json', 'a+', encoding='utf-8') as f:
+        json.dump(data_info, f)
+        f.write("\n")
